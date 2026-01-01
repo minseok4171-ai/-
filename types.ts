@@ -25,3 +25,13 @@ export interface SearchHistory {
   word: string;
   timestamp: number;
 }
+
+export type ProficiencyLevel = 'new' | 'learning' | 'mastered';
+
+export interface SavedWordEntry {
+  word: string;
+  definition: WordDefinition;
+  note: string;
+  proficiency: ProficiencyLevel;
+  savedAt: number;
+}
