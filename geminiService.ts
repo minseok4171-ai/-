@@ -2,10 +2,10 @@
 import { GoogleGenAI, Type, Modality } from "@google/genai";
 import { WordDefinition } from "./types";
 
-const API_KEY = process.env.API_KEY || '';
-
 export const getWordInfo = async (word: string): Promise<WordDefinition> => {
-  const ai = new GoogleGenAI({ apiKey: API_KEY });
+  // 호출 시점에 API 키를 확인하여 안전하게 인스턴스 생성
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  
   const response = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
     contents: `Look up the English word "${word}" for Korean students. Provide multiple meanings if available. 
@@ -30,8 +30,8 @@ export const getWordInfo = async (word: string): Promise<WordDefinition> => {
             items: {
               type: Type.OBJECT,
               properties: {
-                pos: { type: Type.STRING, description: "Part of speech, e.g., noun, verb" },
-                definition: { type: Type.STRING, description: "English definition" },
+                pos: { type: Type.STRING },
+                definition: { type: Type.STRING },
                 koreanMeanings: {
                   type: Type.ARRAY,
                   items: { type: Type.STRING }
@@ -61,8 +61,7 @@ export const getWordInfo = async (word: string): Promise<WordDefinition> => {
           },
           synonyms: {
             type: Type.ARRAY,
-            items: { type: Type.STRING },
-            description: "General synonyms for the word as a whole"
+            items: { type: Type.STRING }
           }
         },
         required: ["word", "phonetic", "partsOfSpeech", "meanings", "synonyms"]
@@ -70,11 +69,22 @@ export const getWordInfo = async (word: string): Promise<WordDefinition> => {
     }
   });
 
-  return JSON.parse(response.text);
+  const text = response.text;
+  if (!text) throw new Error("Empty response from AI");
+  
+  // JSON 응답 내 불필요한 마크다운 태그가 포함된 경우 제거
+  const cleanedJson = text.replace(/^```json\n?/, '').replace(/\n?```$/, '').trim();
+  
+  try {
+    return JSON.parse(cleanedJson);
+  } catch (e) {
+    console.error("JSON Parse Error. Content:", text);
+    throw new Error("Invalid response format");
+  }
 };
 
 export const getPronunciationAudio = async (word: string): Promise<string> => {
-  const ai = new GoogleGenAI({ apiKey: API_KEY });
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const response = await ai.models.generateContent({
     model: "gemini-2.5-flash-preview-tts",
     contents: [{ parts: [{ text: `Pronounce clearly: ${word}` }] }],
@@ -93,7 +103,6 @@ export const getPronunciationAudio = async (word: string): Promise<string> => {
   return base64Audio;
 };
 
-// Audio Utilities as per guidelines
 export function decode(base64: string) {
   const binaryString = atob(base64);
   const len = binaryString.length;
