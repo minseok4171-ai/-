@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Search, Volume2, History, X, GraduationCap, BookOpen, Quote, Loader2, Sparkles, ArrowRightLeft, ArrowRight, MinusCircle, PlusCircle } from 'lucide-react';
+import { Search, Volume2, History, X, GraduationCap, BookOpen, Quote, Loader2, Sparkles, MinusCircle, PlusCircle } from 'lucide-react';
 import { getWordInfo, getPronunciationAudio, decode, decodeAudioData } from './geminiService';
 import { WordDefinition, SearchHistory } from './types';
 
@@ -14,9 +14,13 @@ const App: React.FC = () => {
 
   // Load history from localStorage
   useEffect(() => {
-    const savedHistory = localStorage.getItem('edu_dict_history');
-    if (savedHistory) {
-      setHistory(JSON.parse(savedHistory));
+    try {
+      const savedHistory = localStorage.getItem('edu_dict_history');
+      if (savedHistory) {
+        setHistory(JSON.parse(savedHistory));
+      }
+    } catch (e) {
+      console.error("Failed to load history", e);
     }
   }, []);
 
@@ -43,7 +47,7 @@ const App: React.FC = () => {
       setResult(data);
       saveToHistory(data.word);
     } catch (err) {
-      setError('단어를 찾는 중 오류가 발생했습니다. 다시 시도해 주세요.');
+      setError('단어를 찾는 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.');
       console.error(err);
     } finally {
       setLoading(false);
@@ -89,11 +93,11 @@ const App: React.FC = () => {
             <div className="bg-white p-1.5 rounded-lg shadow-inner">
               <BookOpen className="w-7 h-7 text-blue-600" />
             </div>
-            <h1 className="text-2xl font-black tracking-tighter uppercase">Edu Dictionary</h1>
+            <h1 className="text-xl md:text-2xl font-black tracking-tighter">WAWA 학습코칭학원</h1>
           </div>
           <div className="hidden md:flex gap-6 text-sm font-semibold">
             <span className="flex items-center gap-1.5 opacity-90 hover:opacity-100"><GraduationCap size={18}/> 학습 맞춤</span>
-            <span className="flex items-center gap-1.5 opacity-90 hover:opacity-100"><Sparkles size={18}/> AI 추천</span>
+            <span className="flex items-center gap-1.5 opacity-90 hover:opacity-100"><Sparkles size={18}/> AI 사전</span>
           </div>
         </div>
       </header>
@@ -101,15 +105,15 @@ const App: React.FC = () => {
       <main className="w-full max-w-4xl px-4 mt-10 flex-grow">
         {/* Search Bar */}
         <div className="relative mb-10">
-          <form onSubmit={(e) => handleSearch(e)} className="relative">
+          <form onSubmit={(e) => handleSearch(e)} className="relative group">
             <input
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="단어를 입력하면 모든 의미와 관계어를 찾아줍니다..."
+              placeholder="궁금한 단어를 입력하세요..."
               className="w-full h-16 pl-14 pr-24 rounded-2xl border-4 border-white bg-white shadow-2xl shadow-blue-100 text-xl focus:outline-none focus:border-blue-400 focus:ring-0 transition-all placeholder:text-slate-300"
             />
-            <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300" size={28} />
+            <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-blue-400" size={28} />
             <button
               type="submit"
               disabled={loading}
@@ -122,9 +126,12 @@ const App: React.FC = () => {
 
         {/* Error State */}
         {error && (
-          <div className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 text-red-700 rounded-r-xl flex items-center gap-3 shadow-sm">
-            <X size={20} className="cursor-pointer" onClick={() => setError(null)} />
-            <p className="font-medium">{error}</p>
+          <div className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 text-red-700 rounded-r-xl flex items-center justify-between shadow-sm">
+            <div className="flex items-center gap-3">
+               <X size={20} />
+               <p className="font-medium">{error}</p>
+            </div>
+            <button onClick={() => setError(null)} className="text-red-400 hover:text-red-600">닫기</button>
           </div>
         )}
 
@@ -161,8 +168,8 @@ const App: React.FC = () => {
               <Loader2 className="animate-spin mb-6" size={64} />
               <Sparkles className="absolute -top-2 -right-2 text-yellow-400 animate-bounce" size={24} />
             </div>
-            <p className="font-black text-xl tracking-tight text-slate-600">AI가 단어의 모든 의미를 분석하고 있어요</p>
-            <p className="text-slate-400 mt-2 text-sm">잠시만 기다려주세요...</p>
+            <p className="font-black text-xl tracking-tight text-slate-600">AI가 단어를 분석하고 있습니다</p>
+            <p className="text-slate-400 mt-2 text-sm">유의어, 반의어, 예문까지 모두 찾아 드릴게요</p>
           </div>
         )}
 
@@ -174,7 +181,7 @@ const App: React.FC = () => {
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                 <div>
                   <div className="flex items-center gap-5 mb-3">
-                    <h1 className="text-6xl font-black text-slate-900 tracking-tighter">{result.word}</h1>
+                    <h1 className="text-5xl md:text-6xl font-black text-slate-900 tracking-tighter">{result.word}</h1>
                     <button
                       onClick={playAudio}
                       className={`p-4 rounded-2xl transition-all shadow-sm ${isPlaying ? 'bg-blue-600 text-white scale-110' : 'bg-slate-100 text-slate-400 hover:bg-blue-600 hover:text-white hover:shadow-lg'}`}
@@ -207,7 +214,7 @@ const App: React.FC = () => {
               </div>
             </div>
 
-            {/* Detailed Meanings with Examples, Synonyms, Antonyms */}
+            {/* Detailed Meanings */}
             <div className="grid gap-6 mb-12">
               {result.meanings.map((m, i) => (
                 <div key={i} className="bg-white rounded-3xl shadow-lg border border-slate-100 overflow-hidden group hover:shadow-2xl transition-all duration-300">
@@ -228,7 +235,7 @@ const App: React.FC = () => {
                     </div>
                     <p className="text-slate-400 italic text-base leading-snug">{m.definition}</p>
 
-                    {/* Relation Words Grid (Synonyms & Antonyms) */}
+                    {/* Relation Words Grid */}
                     <div className="mt-6 flex flex-col sm:flex-row gap-4">
                       {m.synonyms.length > 0 && (
                         <div className="flex-1 bg-green-50/50 rounded-2xl p-4 border border-green-100">
@@ -294,13 +301,13 @@ const App: React.FC = () => {
 
         {/* Empty State */}
         {!result && !loading && (
-          <div className="flex flex-col items-center justify-center py-24 text-center">
+          <div className="flex flex-col items-center justify-center py-24 text-center animate-in fade-in duration-1000">
             <div className="w-40 h-40 bg-white rounded-[2.5rem] shadow-2xl flex items-center justify-center mb-8 rotate-3">
               <BookOpen size={80} className="text-blue-100" />
             </div>
-            <h2 className="text-3xl font-black text-slate-800 mb-4">공부가 즐거워지는 스마트 영어 사전</h2>
+            <h2 className="text-3xl font-black text-slate-800 mb-4 tracking-tight">공부가 즐거워지는 스마트 영어 사전</h2>
             <p className="max-w-md mx-auto text-slate-400 text-lg leading-relaxed px-6">
-              단어를 검색하면 AI가 <span className="text-blue-600 font-bold">뜻별 유의어와 반의어</span>까지 한눈에 정리해줍니다. <br/>지금 바로 검색해보세요!
+              궁금한 단어를 입력하면 <span className="text-blue-600 font-bold">WAWA AI</span>가 <br/>모든 의미와 예문을 정리해줍니다.
             </p>
           </div>
         )}
@@ -308,15 +315,11 @@ const App: React.FC = () => {
 
       {/* Footer */}
       <footer className="w-full bg-white border-t border-slate-200 py-8 mt-auto">
-        <div className="max-w-4xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-4 text-sm text-slate-400 font-bold">
-          <div className="flex items-center gap-2">
-             <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-             <span>AI Service Online</span>
-          </div>
+        <div className="max-w-4xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-4 text-sm text-slate-400 font-bold uppercase tracking-wider">
           <p>© 2024 WAWA LEARNING COACHING CENTER</p>
           <div className="flex gap-6">
-            <button className="hover:text-blue-600 transition-colors uppercase">도움말</button>
-            <button className="hover:text-blue-600 transition-colors uppercase">의견보내기</button>
+            <button className="hover:text-blue-600 transition-colors">이용약관</button>
+            <button className="hover:text-blue-600 transition-colors">개인정보처리방침</button>
           </div>
         </div>
       </footer>
