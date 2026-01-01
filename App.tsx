@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Search, Volume2, History, X, GraduationCap, BookOpen, Quote, Loader2, Sparkles, MinusCircle, PlusCircle, AlertCircle } from 'lucide-react';
+import { Search, Volume2, History, X, GraduationCap, BookOpen, Quote, Loader2, Sparkles, MinusCircle, PlusCircle, AlertCircle, WifiOff } from 'lucide-react';
 import { getWordInfo, getPronunciationAudio, decode, decodeAudioData } from './geminiService';
 import { WordDefinition, SearchHistory } from './types';
 
@@ -11,14 +11,26 @@ const App: React.FC = () => {
   const [history, setHistory] = useState<SearchHistory[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
 
   useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
     try {
       const savedHistory = localStorage.getItem('wawa_dict_history');
       if (savedHistory) setHistory(JSON.parse(savedHistory));
     } catch (e) {
       console.warn("History load failed");
     }
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
   }, []);
 
   const saveToHistory = (word: string) => {
@@ -35,6 +47,11 @@ const App: React.FC = () => {
     const targetWord = (searchWord || query).trim();
     if (!targetWord) return;
 
+    if (!navigator.onLine) {
+      setError("인터넷 연결이 끊겨 있습니다. 네트워크 상태를 확인해 주세요.");
+      return;
+    }
+
     setLoading(true);
     setError(null);
     setResult(null);
@@ -45,10 +62,7 @@ const App: React.FC = () => {
       saveToHistory(data.word);
     } catch (err: any) {
       console.error("Search Error:", err);
-      let msg = '단어를 찾는 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.';
-      if (err.message?.includes('API_KEY')) msg = '시스템 설정 오류: API 키가 유효하지 않습니다.';
-      if (err.name === 'SyntaxError') msg = '데이터 해석 오류: AI가 올바른 형식으로 응답하지 않았습니다.';
-      setError(msg);
+      setError(err.message || '단어를 찾는 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.');
     } finally {
       setLoading(false);
     }
@@ -96,7 +110,14 @@ const App: React.FC = () => {
               WAWA 학습코칭학원 영어사전
             </h1>
           </div>
-          <BookOpen className="w-6 h-6 text-slate-400" />
+          <div className="flex items-center gap-4">
+            {!isOnline && (
+              <div className="flex items-center gap-1 text-red-500 text-xs font-bold animate-pulse">
+                <WifiOff className="w-4 h-4" /> 오프라인
+              </div>
+            )}
+            <BookOpen className="w-6 h-6 text-slate-400" />
+          </div>
         </div>
       </header>
 
@@ -131,9 +152,12 @@ const App: React.FC = () => {
         </form>
 
         {error && (
-          <div className="mb-8 p-4 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3 text-red-700">
+          <div className="mb-8 p-4 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3 text-red-700 animate-in fade-in zoom-in-95">
             <AlertCircle className="w-5 h-5 mt-0.5 flex-shrink-0" />
-            <p>{error}</p>
+            <div>
+              <p className="font-bold">검색에 실패했습니다</p>
+              <p className="text-sm">{error}</p>
+            </div>
           </div>
         )}
 
@@ -164,7 +188,7 @@ const App: React.FC = () => {
                 <Sparkles className="w-5 h-5 text-indigo-600" /> 오늘의 학습 팁
               </h2>
               <p className="text-indigo-800/80 text-sm leading-relaxed">
-                단어의 뜻뿐만 아니라 예문을 큰 소리로 따라 읽어보세요! WAWA와 함께라면 영어 실력이 쑥쑥 늘어날 거예요.
+                인터넷 연결이 원활할 때 더 정확한 발음과 예문을 확인할 수 있어요. WAWA 영어사전은 여러분의 매일 성장을 응원합니다!
               </p>
             </div>
           </div>
@@ -172,8 +196,16 @@ const App: React.FC = () => {
 
         {loading && (
           <div className="flex flex-col items-center justify-center py-20 gap-4">
-            <Loader2 className="w-10 h-10 text-indigo-600 animate-spin" />
-            <p className="text-slate-500 animate-pulse font-medium">단어 정보를 가져오고 있습니다...</p>
+            <div className="relative">
+              <Loader2 className="w-12 h-12 text-indigo-600 animate-spin" />
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="w-2 h-2 bg-indigo-400 rounded-full animate-ping" />
+              </div>
+            </div>
+            <div className="text-center">
+              <p className="text-slate-900 font-bold">정보를 찾는 중...</p>
+              <p className="text-slate-400 text-sm">네트워크 상태에 따라 2~3초 정도 소요될 수 있습니다.</p>
+            </div>
           </div>
         )}
 
@@ -222,17 +254,17 @@ const App: React.FC = () => {
                       <span key={i} className="text-xl font-bold text-indigo-600">{km}{i < meaning.koreanMeanings.length - 1 ? ',' : ''}</span>
                     ))}
                   </div>
-                  <p className="text-lg font-medium text-slate-600">{meaning.definition}</p>
+                  <p className="text-lg font-medium text-slate-600 leading-relaxed">{meaning.definition}</p>
                 </div>
 
                 {meaning.examples.length > 0 && (
                   <div className="space-y-4">
                     <h4 className="text-slate-500 text-xs font-bold uppercase tracking-widest flex items-center gap-2">
-                      <Quote className="w-3 h-3" /> 학습용 예문
+                      <Quote className="w-3 h-3 text-indigo-400" /> 학습용 예문
                     </h4>
                     <ul className="space-y-4">
                       {meaning.examples.map((ex, eIdx) => (
-                        <li key={eIdx} className="pl-4 border-l-4 border-indigo-100">
+                        <li key={eIdx} className="pl-4 border-l-4 border-indigo-100 bg-slate-50/50 p-3 rounded-r-xl">
                           <p className="text-slate-800 text-lg italic mb-1">
                             {highlightWord(ex.sentence, result.word)}
                           </p>
@@ -250,7 +282,7 @@ const App: React.FC = () => {
                     </h4>
                     <div className="flex flex-wrap gap-2">
                       {meaning.synonyms.length > 0 ? meaning.synonyms.map((s, i) => (
-                        <span key={i} className="text-sm text-slate-600 bg-slate-50 px-2 py-1 rounded border">{s}</span>
+                        <span key={i} className="text-sm text-slate-600 bg-slate-50 px-2 py-1 rounded border hover:bg-white cursor-help transition-colors">{s}</span>
                       )) : <span className="text-slate-400 text-xs">없음</span>}
                     </div>
                   </div>
@@ -260,7 +292,7 @@ const App: React.FC = () => {
                     </h4>
                     <div className="flex flex-wrap gap-2">
                       {meaning.antonyms.length > 0 ? meaning.antonyms.map((a, i) => (
-                        <span key={i} className="text-sm text-slate-600 bg-slate-50 px-2 py-1 rounded border">{a}</span>
+                        <span key={i} className="text-sm text-slate-600 bg-slate-50 px-2 py-1 rounded border hover:bg-white cursor-help transition-colors">{a}</span>
                       )) : <span className="text-slate-400 text-xs">없음</span>}
                     </div>
                   </div>

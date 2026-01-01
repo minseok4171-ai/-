@@ -3,15 +3,14 @@ import { GoogleGenAI, Type, Modality } from "@google/genai";
 import { WordDefinition } from "./types";
 
 export const getWordInfo = async (word: string): Promise<WordDefinition> => {
-  // 호출 시점에 새 인스턴스를 생성하여 주입된 API_KEY를 확실히 사용함
+  // 항상 최신 API 키를 사용하도록 매 호출 시 인스턴스 생성
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-3-pro-preview', // 더 복잡한 구조 처리에 능숙한 프로 모델 사용
+      model: 'gemini-3-flash-preview', // 사전 검색에 최적화된 빠르고 안정적인 모델
       contents: `Look up the English word "${word}" for Korean K-12 students. 
-      Return the response as a pure JSON object without any markdown formatting.
-      Include phonetic symbols, multiple meanings, examples, synonyms, and antonyms.`,
+      The response must be a single valid JSON object containing: word, phonetic, partsOfSpeech, meanings (with pos, definition, koreanMeanings, examples with translation, synonyms, antonyms), and general synonyms.`,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
@@ -19,10 +18,7 @@ export const getWordInfo = async (word: string): Promise<WordDefinition> => {
           properties: {
             word: { type: Type.STRING },
             phonetic: { type: Type.STRING },
-            partsOfSpeech: {
-              type: Type.ARRAY,
-              items: { type: Type.STRING }
-            },
+            partsOfSpeech: { type: Type.ARRAY, items: { type: Type.STRING } },
             meanings: {
               type: Type.ARRAY,
               items: {
@@ -30,10 +26,7 @@ export const getWordInfo = async (word: string): Promise<WordDefinition> => {
                 properties: {
                   pos: { type: Type.STRING },
                   definition: { type: Type.STRING },
-                  koreanMeanings: {
-                    type: Type.ARRAY,
-                    items: { type: Type.STRING }
-                  },
+                  koreanMeanings: { type: Type.ARRAY, items: { type: Type.STRING } },
                   examples: {
                     type: Type.ARRAY,
                     items: {
@@ -45,22 +38,13 @@ export const getWordInfo = async (word: string): Promise<WordDefinition> => {
                       required: ["sentence", "translation"]
                     }
                   },
-                  synonyms: {
-                    type: Type.ARRAY,
-                    items: { type: Type.STRING }
-                  },
-                  antonyms: {
-                    type: Type.ARRAY,
-                    items: { type: Type.STRING }
-                  }
+                  synonyms: { type: Type.ARRAY, items: { type: Type.STRING } },
+                  antonyms: { type: Type.ARRAY, items: { type: Type.STRING } }
                 },
                 required: ["pos", "definition", "koreanMeanings", "examples", "synonyms", "antonyms"]
               }
             },
-            synonyms: {
-              type: Type.ARRAY,
-              items: { type: Type.STRING }
-            }
+            synonyms: { type: Type.ARRAY, items: { type: Type.STRING } }
           },
           required: ["word", "phonetic", "partsOfSpeech", "meanings", "synonyms"]
         }
@@ -68,37 +52,42 @@ export const getWordInfo = async (word: string): Promise<WordDefinition> => {
     });
 
     const text = response.text;
-    if (!text) throw new Error("AI 응답이 비어있습니다.");
+    if (!text) throw new Error("AI 응답 데이터가 없습니다.");
 
-    // JSON만 추출하기 위한 정규식 처리 (마크다운 ```json 태그 등이 포함될 경우 대비)
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    const cleanedJson = jsonMatch ? jsonMatch[0] : text;
-
-    return JSON.parse(cleanedJson);
-  } catch (error) {
-    console.error("Gemini 서비스 오류:", error);
+    // 마크다운 태그 제거 로직 포함
+    const jsonStr = text.replace(/```json/g, "").replace(/```/g, "").trim();
+    return JSON.parse(jsonStr);
+  } catch (error: any) {
+    if (error.message?.includes('fetch')) {
+      throw new Error("인터넷 연결이 불안정합니다. 네트워크 상태를 확인하고 다시 시도해 주세요.");
+    }
+    console.error("Gemini Lookup Error:", error);
     throw error;
   }
 };
 
 export const getPronunciationAudio = async (word: string): Promise<string> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash-preview-tts",
-    contents: [{ parts: [{ text: `Pronounce clearly: ${word}` }] }],
-    config: {
-      responseModalities: [Modality.AUDIO],
-      speechConfig: {
-        voiceConfig: {
-          prebuiltVoiceConfig: { voiceName: 'Kore' },
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash-preview-tts",
+      contents: [{ parts: [{ text: `Pronounce: ${word}` }] }],
+      config: {
+        responseModalities: [Modality.AUDIO],
+        speechConfig: {
+          voiceConfig: {
+            prebuiltVoiceConfig: { voiceName: 'Kore' },
+          },
         },
       },
-    },
-  });
+    });
 
-  const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-  if (!base64Audio) throw new Error("발음 생성에 실패했습니다.");
-  return base64Audio;
+    const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+    if (!base64Audio) throw new Error("Audio failed");
+    return base64Audio;
+  } catch (e) {
+    throw new Error("발음 서버 연결에 실패했습니다.");
+  }
 };
 
 export function decode(base64: string) {
