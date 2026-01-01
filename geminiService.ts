@@ -3,83 +3,83 @@ import { GoogleGenAI, Type, Modality } from "@google/genai";
 import { WordDefinition } from "./types";
 
 export const getWordInfo = async (word: string): Promise<WordDefinition> => {
-  // 호출 시점에 API 키를 확인하여 안전하게 인스턴스 생성
+  // Always create a new instance to ensure the latest API_KEY is used
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
-  const response = await ai.models.generateContent({
-    model: 'gemini-3-flash-preview',
-    contents: `Look up the English word "${word}" for Korean students. Provide multiple meanings if available. 
-    For EACH meaning, provide:
-    1. 2-3 clear example sentences that specifically demonstrate that particular meaning.
-    2. A list of 3-5 synonyms (유의어) specific to this meaning.
-    3. A list of 3-5 antonyms (반의어) specific to this meaning.
-    Ensure the output follows the requested JSON structure exactly.`,
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          word: { type: Type.STRING },
-          phonetic: { type: Type.STRING },
-          partsOfSpeech: {
-            type: Type.ARRAY,
-            items: { type: Type.STRING }
-          },
-          meanings: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                pos: { type: Type.STRING },
-                definition: { type: Type.STRING },
-                koreanMeanings: {
-                  type: Type.ARRAY,
-                  items: { type: Type.STRING }
-                },
-                examples: {
-                  type: Type.ARRAY,
-                  items: {
-                    type: Type.OBJECT,
-                    properties: {
-                      sentence: { type: Type.STRING },
-                      translation: { type: Type.STRING }
-                    },
-                    required: ["sentence", "translation"]
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: `Look up the English word "${word}" for Korean K-12 students. 
+      Provide detailed information including phonetic symbols, multiple meanings, 
+      examples for each meaning, and synonyms/antonyms related to each meaning.
+      The response must be a single valid JSON object.`,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            word: { type: Type.STRING },
+            phonetic: { type: Type.STRING },
+            partsOfSpeech: {
+              type: Type.ARRAY,
+              items: { type: Type.STRING }
+            },
+            meanings: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  pos: { type: Type.STRING, description: "Part of speech" },
+                  definition: { type: Type.STRING, description: "English definition" },
+                  koreanMeanings: {
+                    type: Type.ARRAY,
+                    items: { type: Type.STRING }
+                  },
+                  examples: {
+                    type: Type.ARRAY,
+                    items: {
+                      type: Type.OBJECT,
+                      properties: {
+                        sentence: { type: Type.STRING },
+                        translation: { type: Type.STRING }
+                      },
+                      required: ["sentence", "translation"]
+                    }
+                  },
+                  synonyms: {
+                    type: Type.ARRAY,
+                    items: { type: Type.STRING }
+                  },
+                  antonyms: {
+                    type: Type.ARRAY,
+                    items: { type: Type.STRING }
                   }
                 },
-                synonyms: {
-                  type: Type.ARRAY,
-                  items: { type: Type.STRING }
-                },
-                antonyms: {
-                  type: Type.ARRAY,
-                  items: { type: Type.STRING }
-                }
-              },
-              required: ["pos", "definition", "koreanMeanings", "examples", "synonyms", "antonyms"]
+                required: ["pos", "definition", "koreanMeanings", "examples", "synonyms", "antonyms"]
+              }
+            },
+            synonyms: {
+              type: Type.ARRAY,
+              items: { type: Type.STRING },
+              description: "General synonyms for the word"
             }
           },
-          synonyms: {
-            type: Type.ARRAY,
-            items: { type: Type.STRING }
-          }
-        },
-        required: ["word", "phonetic", "partsOfSpeech", "meanings", "synonyms"]
+          required: ["word", "phonetic", "partsOfSpeech", "meanings", "synonyms"]
+        }
       }
-    }
-  });
+    });
 
-  const text = response.text;
-  if (!text) throw new Error("Empty response from AI");
-  
-  // JSON 응답 내 불필요한 마크다운 태그가 포함된 경우 제거
-  const cleanedJson = text.replace(/^```json\n?/, '').replace(/\n?```$/, '').trim();
-  
-  try {
+    const text = response.text;
+    if (!text) {
+      throw new Error("Empty response from AI model.");
+    }
+
+    // Attempt to clean the text in case the model ignored the mimeType (rare but possible)
+    const cleanedJson = text.replace(/^```json\n?/, '').replace(/\n?```$/, '').trim();
     return JSON.parse(cleanedJson);
-  } catch (e) {
-    console.error("JSON Parse Error. Content:", text);
-    throw new Error("Invalid response format");
+  } catch (error) {
+    console.error("Gemini lookup failed:", error);
+    throw error;
   }
 };
 
@@ -87,7 +87,7 @@ export const getPronunciationAudio = async (word: string): Promise<string> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const response = await ai.models.generateContent({
     model: "gemini-2.5-flash-preview-tts",
-    contents: [{ parts: [{ text: `Pronounce clearly: ${word}` }] }],
+    contents: [{ parts: [{ text: `Pronounce slowly and clearly: ${word}` }] }],
     config: {
       responseModalities: [Modality.AUDIO],
       speechConfig: {

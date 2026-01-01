@@ -1,9 +1,10 @@
 
 import React, { useState, useEffect } from 'react';
-import { Search, Volume2, History, X, GraduationCap, BookOpen, Quote, Loader2, Sparkles, MinusCircle, PlusCircle } from 'lucide-react';
+import { Search, Volume2, History, X, GraduationCap, BookOpen, Quote, Loader2, Sparkles, MinusCircle, PlusCircle, AlertCircle } from 'lucide-react';
 import { getWordInfo, getPronunciationAudio, decode, decodeAudioData } from './geminiService';
 import { WordDefinition, SearchHistory } from './types';
 
+// Main App Component for the K-12 Educational Dictionary
 const App: React.FC = () => {
   const [query, setQuery] = useState('');
   const [result, setResult] = useState<WordDefinition | null>(null);
@@ -12,7 +13,7 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
 
-  // Load history from localStorage
+  // Load search history on mount
   useEffect(() => {
     try {
       const savedHistory = localStorage.getItem('edu_dict_history');
@@ -20,23 +21,25 @@ const App: React.FC = () => {
         setHistory(JSON.parse(savedHistory));
       }
     } catch (e) {
-      console.error("Failed to load history", e);
+      console.warn("Could not load search history from localStorage.");
     }
   }, []);
 
+  // Helper to save words to local history
   const saveToHistory = (word: string) => {
     const newHistory = [
       { word, timestamp: Date.now() },
-      ...history.filter(h => h.word !== word)
+      ...history.filter(h => h.word.toLowerCase() !== word.toLowerCase())
     ].slice(0, 10);
     setHistory(newHistory);
     localStorage.setItem('edu_dict_history', JSON.stringify(newHistory));
   };
 
+  // Search handler using Gemini API
   const handleSearch = async (e?: React.FormEvent, searchWord?: string) => {
     if (e) e.preventDefault();
-    const targetWord = searchWord || query;
-    if (!targetWord.trim()) return;
+    const targetWord = (searchWord || query).trim();
+    if (!targetWord) return;
 
     setLoading(true);
     setError(null);
@@ -46,14 +49,22 @@ const App: React.FC = () => {
       const data = await getWordInfo(targetWord);
       setResult(data);
       saveToHistory(data.word);
-    } catch (err) {
-      setError('단어를 찾는 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.');
-      console.error(err);
+    } catch (err: any) {
+      console.error("Word Search Error:", err);
+      // Friendly error messages for students
+      let errorMessage = '단어를 찾는 중 오류가 발생했습니다.';
+      if (err.message?.includes('401') || err.message?.includes('API_KEY')) {
+        errorMessage = '시스템 오류: API 키가 올바르지 않거나 설정되지 않았습니다.';
+      } else if (err.message?.includes('404')) {
+        errorMessage = '검색된 정보를 찾을 수 없습니다.';
+      }
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
   };
 
+  // Play pronunciation audio via Gemini TTS
   const playAudio = async () => {
     if (!result || isPlaying) return;
     setIsPlaying(true);
@@ -72,257 +83,224 @@ const App: React.FC = () => {
     }
   };
 
-  const clearHistory = () => {
-    setHistory([]);
-    localStorage.removeItem('edu_dict_history');
-  };
-
+  // Helper to highlight the searched word within example sentences
   const highlightWord = (sentence: string, word: string) => {
-    const regex = new RegExp(`(${word})`, 'gi');
-    return sentence.split(regex).map((part, i) => 
-      part.toLowerCase() === word.toLowerCase() ? <strong key={i} className="text-blue-600 font-bold underline decoration-2 underline-offset-2">{part}</strong> : part
+    if (!word) return sentence;
+    const parts = sentence.split(new RegExp(`(${word})`, 'gi'));
+    return (
+      <span>
+        {parts.map((part, i) => 
+          part.toLowerCase() === word.toLowerCase() ? (
+            <span key={i} className="font-bold text-indigo-600 underline">{part}</span>
+          ) : part
+        )}
+      </span>
     );
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center bg-slate-50 text-slate-800 pb-20">
-      {/* Header */}
-      <header className="w-full bg-blue-600 text-white p-6 shadow-lg sticky top-0 z-50">
-        <div className="max-w-4xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3 cursor-pointer" onClick={() => window.location.reload()}>
-            <div className="bg-white p-1.5 rounded-lg shadow-inner">
-              <BookOpen className="w-7 h-7 text-blue-600" />
-            </div>
-            <h1 className="text-xl md:text-2xl font-black tracking-tighter">WAWA 학습코칭학원</h1>
+    <div className="min-h-screen bg-slate-50 font-sans text-slate-900 pb-12">
+      <header className="bg-white border-b sticky top-0 z-10">
+        <div className="max-w-4xl mx-auto px-4 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <GraduationCap className="w-8 h-8 text-indigo-600" />
+            <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600">
+              K-12 Edu Dictionary
+            </h1>
           </div>
-          <div className="hidden md:flex gap-6 text-sm font-semibold">
-            <span className="flex items-center gap-1.5 opacity-90 hover:opacity-100"><GraduationCap size={18}/> 학습 맞춤</span>
-            <span className="flex items-center gap-1.5 opacity-90 hover:opacity-100"><Sparkles size={18}/> AI 사전</span>
-          </div>
+          <BookOpen className="w-6 h-6 text-slate-400" />
         </div>
       </header>
 
-      <main className="w-full max-w-4xl px-4 mt-10 flex-grow">
+      <main className="max-w-4xl mx-auto px-4 pt-8">
         {/* Search Bar */}
-        <div className="relative mb-10">
-          <form onSubmit={(e) => handleSearch(e)} className="relative group">
-            <input
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="궁금한 단어를 입력하세요..."
-              className="w-full h-16 pl-14 pr-24 rounded-2xl border-4 border-white bg-white shadow-2xl shadow-blue-100 text-xl focus:outline-none focus:border-blue-400 focus:ring-0 transition-all placeholder:text-slate-300"
-            />
-            <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-blue-400" size={28} />
+        <form onSubmit={handleSearch} className="relative group mb-8">
+          <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
+            <Search className="w-5 h-5 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
+          </div>
+          <input
+            type="text"
+            className="w-full h-14 pl-12 pr-12 bg-white border-2 border-slate-200 rounded-2xl outline-none focus:border-indigo-500 shadow-sm transition-all text-lg"
+            placeholder="Search an English word..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+          {query && (
             <button
-              type="submit"
-              disabled={loading}
-              className="absolute right-2 top-1/2 -translate-y-1/2 bg-blue-600 text-white px-8 py-3 rounded-xl font-black hover:bg-blue-700 active:scale-95 transition-all disabled:opacity-50"
+              type="button"
+              onClick={() => setQuery('')}
+              className="absolute right-28 inset-y-0 flex items-center px-3 text-slate-400 hover:text-slate-600"
             >
-              {loading ? <Loader2 className="animate-spin" size={24}/> : "검색"}
+              <X className="w-5 h-5" />
             </button>
-          </form>
-        </div>
+          )}
+          <button 
+            type="submit"
+            className="absolute right-3 top-2.5 h-9 px-6 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-xl transition-colors disabled:opacity-50"
+            disabled={loading || !query.trim()}
+          >
+            {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Search'}
+          </button>
+        </form>
 
         {/* Error State */}
         {error && (
-          <div className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 text-red-700 rounded-r-xl flex items-center justify-between shadow-sm">
-            <div className="flex items-center gap-3">
-               <X size={20} />
-               <p className="font-medium">{error}</p>
-            </div>
-            <button onClick={() => setError(null)} className="text-red-400 hover:text-red-600">닫기</button>
+          <div className="mb-8 p-4 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3 text-red-700">
+            <AlertCircle className="w-5 h-5 mt-0.5 flex-shrink-0" />
+            <p>{error}</p>
           </div>
         )}
 
-        {/* Recent Searches */}
-        {!result && !loading && history.length > 0 && (
-          <div className="mb-8 animate-in fade-in slide-in-from-top-4 duration-500">
-            <div className="flex justify-between items-center mb-4 border-b border-slate-200 pb-2">
-              <h2 className="flex items-center gap-2 font-black text-slate-400 uppercase tracking-widest text-xs">
-                <History size={14} /> 최근 찾아본 단어
+        {/* Empty State / Dashboard */}
+        {!result && !loading && !error && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="bg-white p-6 rounded-2xl border shadow-sm">
+              <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                <History className="w-5 h-5 text-slate-400" /> Recent Searches
               </h2>
-              <button onClick={clearHistory} className="text-xs font-bold text-slate-400 hover:text-red-500 transition-colors uppercase">지우기</button>
+              {history.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {history.map((item, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => { setQuery(item.word); handleSearch(undefined, item.word); }}
+                      className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm font-medium transition-colors"
+                    >
+                      {item.word}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-slate-400 text-sm">No recent searches yet.</p>
+              )}
             </div>
-            <div className="flex flex-wrap gap-2">
-              {history.map((h, i) => (
-                <button
-                  key={i}
-                  onClick={() => {
-                    setQuery(h.word);
-                    handleSearch(undefined, h.word);
-                  }}
-                  className="bg-white px-5 py-2.5 rounded-xl border border-slate-200 shadow-sm hover:border-blue-500 hover:text-blue-600 hover:shadow-md transition-all text-sm font-bold text-slate-600"
-                >
-                  {h.word}
-                </button>
-              ))}
+            <div className="bg-indigo-50 p-6 rounded-2xl border border-indigo-100">
+              <h2 className="text-lg font-semibold text-indigo-900 mb-2 flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-indigo-600" /> Learning Tip
+              </h2>
+              <p className="text-indigo-800/80 text-sm leading-relaxed">
+                Try searching for words like "enthusiasm" or "sustainable" to see detailed meanings, examples, and synonyms specially curated for students!
+              </p>
             </div>
           </div>
         )}
 
         {/* Loading State */}
         {loading && (
-          <div className="flex flex-col items-center justify-center py-32 text-blue-600">
-            <div className="relative">
-              <Loader2 className="animate-spin mb-6" size={64} />
-              <Sparkles className="absolute -top-2 -right-2 text-yellow-400 animate-bounce" size={24} />
-            </div>
-            <p className="font-black text-xl tracking-tight text-slate-600">AI가 단어를 분석하고 있습니다</p>
-            <p className="text-slate-400 mt-2 text-sm">유의어, 반의어, 예문까지 모두 찾아 드릴게요</p>
+          <div className="flex flex-col items-center justify-center py-20 gap-4">
+            <Loader2 className="w-10 h-10 text-indigo-600 animate-spin" />
+            <p className="text-slate-500 animate-pulse font-medium">Looking up the best definition for you...</p>
           </div>
         )}
 
-        {/* Result UI */}
+        {/* Results View */}
         {result && (
-          <div className="animate-in fade-in slide-in-from-bottom-8 duration-700">
-            {/* Word Main Card */}
-            <div className="bg-white rounded-3xl shadow-xl p-8 mb-8 border border-slate-100">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <article className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <section className="bg-white p-8 rounded-3xl border shadow-sm">
+              <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-4">
                 <div>
-                  <div className="flex items-center gap-5 mb-3">
-                    <h1 className="text-5xl md:text-6xl font-black text-slate-900 tracking-tighter">{result.word}</h1>
-                    <button
-                      onClick={playAudio}
-                      className={`p-4 rounded-2xl transition-all shadow-sm ${isPlaying ? 'bg-blue-600 text-white scale-110' : 'bg-slate-100 text-slate-400 hover:bg-blue-600 hover:text-white hover:shadow-lg'}`}
-                    >
-                      <Volume2 size={32} className={isPlaying ? 'animate-pulse' : ''} />
-                    </button>
-                  </div>
+                  <h2 className="text-4xl font-bold text-slate-900 mb-2">{result.word}</h2>
                   <div className="flex items-center gap-3">
-                    <span className="text-2xl text-slate-400 font-medium tracking-wide">/{result.phonetic}/</span>
-                    <div className="flex gap-2">
-                      {result.partsOfSpeech.map((pos, i) => (
-                        <span key={i} className="bg-slate-800 text-white px-3 py-1 rounded-lg text-xs font-black uppercase">
-                          {pos}
-                        </span>
-                      ))}
-                    </div>
+                    <span className="text-xl text-slate-500 font-mono">{result.phonetic}</span>
+                    <button 
+                      onClick={playAudio}
+                      disabled={isPlaying}
+                      className="p-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-full transition-colors disabled:opacity-50"
+                      title="Listen to pronunciation"
+                    >
+                      <Volume2 className={`w-5 h-5 ${isPlaying ? 'animate-pulse' : ''}`} />
+                    </button>
                   </div>
                 </div>
-                <div className="flex flex-wrap gap-2 justify-end max-w-xs">
-                  {result.synonyms.slice(0, 6).map((s, i) => (
-                    <button 
-                      key={i} 
-                      onClick={() => { setQuery(s); handleSearch(undefined, s); }}
-                      className="bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg text-sm font-bold hover:bg-blue-100 transition-colors"
-                    >
-                      #{s}
-                    </button>
+                <div className="flex flex-wrap gap-2 md:justify-end">
+                  {result.partsOfSpeech.map((pos, i) => (
+                    <span key={i} className="px-3 py-1 bg-slate-100 text-slate-600 rounded-full text-xs font-bold uppercase tracking-wider">
+                      {pos}
+                    </span>
                   ))}
                 </div>
               </div>
-            </div>
 
-            {/* Detailed Meanings */}
-            <div className="grid gap-6 mb-12">
-              {result.meanings.map((m, i) => (
-                <div key={i} className="bg-white rounded-3xl shadow-lg border border-slate-100 overflow-hidden group hover:shadow-2xl transition-all duration-300">
-                  {/* Meaning Header */}
-                  <div className="bg-slate-50 p-6 border-b border-slate-100">
-                    <div className="flex items-center gap-3 mb-3">
-                      <span className="flex items-center justify-center w-8 h-8 rounded-full bg-blue-600 text-white font-black text-sm shadow-md">
-                        {i + 1}
+              {result.synonyms.length > 0 && (
+                <div className="mt-8 border-t pt-6">
+                  <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-4">General Synonyms</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {result.synonyms.map((s, i) => (
+                      <span key={i} className="px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-lg text-sm font-medium">
+                        {s}
                       </span>
-                      <span className="text-sm font-black text-blue-600 uppercase italic tracking-widest">{m.pos}</span>
-                    </div>
-                    <div className="flex flex-wrap items-baseline gap-3 mb-2">
-                      {m.koreanMeanings.map((km, ki) => (
-                        <h2 key={ki} className="text-3xl font-black text-slate-800">
-                          {km}{ki < m.koreanMeanings.length - 1 ? ',' : ''}
-                        </h2>
-                      ))}
-                    </div>
-                    <p className="text-slate-400 italic text-base leading-snug">{m.definition}</p>
-
-                    {/* Relation Words Grid */}
-                    <div className="mt-6 flex flex-col sm:flex-row gap-4">
-                      {m.synonyms.length > 0 && (
-                        <div className="flex-1 bg-green-50/50 rounded-2xl p-4 border border-green-100">
-                          <h4 className="text-[10px] font-black text-green-600 uppercase tracking-tighter mb-2 flex items-center gap-1.5">
-                            <PlusCircle size={12}/> 유의어 (Synonyms)
-                          </h4>
-                          <div className="flex flex-wrap gap-1.5">
-                            {m.synonyms.map((s, si) => (
-                              <button 
-                                key={si} 
-                                onClick={() => { setQuery(s); handleSearch(undefined, s); }}
-                                className="text-xs font-bold bg-white px-2 py-1 rounded-md border border-green-200 text-green-700 hover:bg-green-600 hover:text-white transition-colors"
-                              >
-                                {s}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      {m.antonyms.length > 0 && (
-                        <div className="flex-1 bg-red-50/50 rounded-2xl p-4 border border-red-100">
-                          <h4 className="text-[10px] font-black text-red-600 uppercase tracking-tighter mb-2 flex items-center gap-1.5">
-                            <MinusCircle size={12}/> 반의어 (Antonyms)
-                          </h4>
-                          <div className="flex flex-wrap gap-1.5">
-                            {m.antonyms.map((a, ai) => (
-                              <button 
-                                key={ai} 
-                                onClick={() => { setQuery(a); handleSearch(undefined, a); }}
-                                className="text-xs font-bold bg-white px-2 py-1 rounded-md border border-red-200 text-red-700 hover:bg-red-600 hover:text-white transition-colors"
-                              >
-                                {a}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
+                    ))}
                   </div>
+                </div>
+              )}
+            </section>
 
-                  {/* Meaning Examples */}
-                  <div className="p-6 md:p-8 bg-white">
-                    <div className="flex items-center gap-2 mb-6 text-slate-400">
-                      <Quote size={18} />
-                      <h3 className="text-sm font-black uppercase tracking-widest">문장에서 확인하기</h3>
-                    </div>
-                    <div className="space-y-8">
-                      {m.examples.map((ex, exIdx) => (
-                        <div key={exIdx} className="relative pl-6 border-l-4 border-blue-100 hover:border-blue-400 transition-colors py-1">
-                          <p className="text-xl md:text-2xl font-semibold text-slate-800 leading-relaxed mb-2">
+            {result.meanings.map((meaning, mIdx) => (
+              <section key={mIdx} className="bg-white p-8 rounded-3xl border shadow-sm space-y-6">
+                <div className="flex items-center gap-3">
+                  <span className="w-8 h-8 flex items-center justify-center bg-indigo-600 text-white rounded-lg font-bold">
+                    {mIdx + 1}
+                  </span>
+                  <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded text-xs font-bold uppercase">
+                    {meaning.pos}
+                  </span>
+                </div>
+
+                <div>
+                  <h4 className="text-slate-500 text-xs font-bold uppercase tracking-widest mb-2">Meaning & Korean</h4>
+                  <p className="text-lg font-medium text-slate-800 mb-2">{meaning.definition}</p>
+                  <div className="flex flex-wrap gap-2">
+                    {meaning.koreanMeanings.map((km, i) => (
+                      <span key={i} className="text-xl font-bold text-indigo-600">{km}{i < meaning.koreanMeanings.length - 1 ? ',' : ''}</span>
+                    ))}
+                  </div>
+                </div>
+
+                {meaning.examples.length > 0 && (
+                  <div className="space-y-4">
+                    <h4 className="text-slate-500 text-xs font-bold uppercase tracking-widest flex items-center gap-2">
+                      <Quote className="w-3 h-3" /> Examples
+                    </h4>
+                    <ul className="space-y-4">
+                      {meaning.examples.map((ex, eIdx) => (
+                        <li key={eIdx} className="pl-4 border-l-4 border-slate-100">
+                          <p className="text-slate-800 text-lg italic mb-1">
                             {highlightWord(ex.sentence, result.word)}
                           </p>
-                          <p className="text-lg text-slate-500 font-medium">{ex.translation}</p>
-                        </div>
+                          <p className="text-slate-500 text-sm">{ex.translation}</p>
+                        </li>
                       ))}
+                    </ul>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t">
+                  <div>
+                    <h4 className="text-slate-400 text-xs font-bold uppercase tracking-widest mb-3 flex items-center gap-2">
+                      <PlusCircle className="w-3 h-3 text-green-500" /> Synonyms
+                    </h4>
+                    <div className="flex flex-wrap gap-2">
+                      {meaning.synonyms.length > 0 ? meaning.synonyms.map((s, i) => (
+                        <span key={i} className="text-sm text-slate-600 bg-slate-50 px-2 py-1 rounded border">{s}</span>
+                      )) : <span className="text-slate-400 text-xs">None</span>}
+                    </div>
+                  </div>
+                  <div>
+                    <h4 className="text-slate-400 text-xs font-bold uppercase tracking-widest mb-3 flex items-center gap-2">
+                      <MinusCircle className="w-3 h-3 text-red-400" /> Antonyms
+                    </h4>
+                    <div className="flex flex-wrap gap-2">
+                      {meaning.antonyms.length > 0 ? meaning.antonyms.map((a, i) => (
+                        <span key={i} className="text-sm text-slate-600 bg-slate-50 px-2 py-1 rounded border">{a}</span>
+                      )) : <span className="text-slate-400 text-xs">None</span>}
                     </div>
                   </div>
                 </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Empty State */}
-        {!result && !loading && (
-          <div className="flex flex-col items-center justify-center py-24 text-center animate-in fade-in duration-1000">
-            <div className="w-40 h-40 bg-white rounded-[2.5rem] shadow-2xl flex items-center justify-center mb-8 rotate-3">
-              <BookOpen size={80} className="text-blue-100" />
-            </div>
-            <h2 className="text-3xl font-black text-slate-800 mb-4 tracking-tight">공부가 즐거워지는 스마트 영어 사전</h2>
-            <p className="max-w-md mx-auto text-slate-400 text-lg leading-relaxed px-6">
-              궁금한 단어를 입력하면 <span className="text-blue-600 font-bold">WAWA AI</span>가 <br/>모든 의미와 예문을 정리해줍니다.
-            </p>
-          </div>
+              </section>
+            ))}
+          </article>
         )}
       </main>
-
-      {/* Footer */}
-      <footer className="w-full bg-white border-t border-slate-200 py-8 mt-auto">
-        <div className="max-w-4xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-4 text-sm text-slate-400 font-bold uppercase tracking-wider">
-          <p>© 2024 WAWA LEARNING COACHING CENTER</p>
-          <div className="flex gap-6">
-            <button className="hover:text-blue-600 transition-colors">이용약관</button>
-            <button className="hover:text-blue-600 transition-colors">개인정보처리방침</button>
-          </div>
-        </div>
-      </footer>
     </div>
   );
 };
