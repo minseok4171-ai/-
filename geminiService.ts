@@ -3,16 +3,15 @@ import { GoogleGenAI, Type, Modality } from "@google/genai";
 import { WordDefinition } from "./types";
 
 export const getWordInfo = async (word: string): Promise<WordDefinition> => {
-  // Always create a new instance to ensure the latest API_KEY is used
+  // 호출 시점에 새 인스턴스를 생성하여 주입된 API_KEY를 확실히 사용함
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
+      model: 'gemini-3-pro-preview', // 더 복잡한 구조 처리에 능숙한 프로 모델 사용
       contents: `Look up the English word "${word}" for Korean K-12 students. 
-      Provide detailed information including phonetic symbols, multiple meanings, 
-      examples for each meaning, and synonyms/antonyms related to each meaning.
-      The response must be a single valid JSON object.`,
+      Return the response as a pure JSON object without any markdown formatting.
+      Include phonetic symbols, multiple meanings, examples, synonyms, and antonyms.`,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
@@ -29,8 +28,8 @@ export const getWordInfo = async (word: string): Promise<WordDefinition> => {
               items: {
                 type: Type.OBJECT,
                 properties: {
-                  pos: { type: Type.STRING, description: "Part of speech" },
-                  definition: { type: Type.STRING, description: "English definition" },
+                  pos: { type: Type.STRING },
+                  definition: { type: Type.STRING },
                   koreanMeanings: {
                     type: Type.ARRAY,
                     items: { type: Type.STRING }
@@ -60,8 +59,7 @@ export const getWordInfo = async (word: string): Promise<WordDefinition> => {
             },
             synonyms: {
               type: Type.ARRAY,
-              items: { type: Type.STRING },
-              description: "General synonyms for the word"
+              items: { type: Type.STRING }
             }
           },
           required: ["word", "phonetic", "partsOfSpeech", "meanings", "synonyms"]
@@ -70,15 +68,15 @@ export const getWordInfo = async (word: string): Promise<WordDefinition> => {
     });
 
     const text = response.text;
-    if (!text) {
-      throw new Error("Empty response from AI model.");
-    }
+    if (!text) throw new Error("AI 응답이 비어있습니다.");
 
-    // Attempt to clean the text in case the model ignored the mimeType (rare but possible)
-    const cleanedJson = text.replace(/^```json\n?/, '').replace(/\n?```$/, '').trim();
+    // JSON만 추출하기 위한 정규식 처리 (마크다운 ```json 태그 등이 포함될 경우 대비)
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    const cleanedJson = jsonMatch ? jsonMatch[0] : text;
+
     return JSON.parse(cleanedJson);
   } catch (error) {
-    console.error("Gemini lookup failed:", error);
+    console.error("Gemini 서비스 오류:", error);
     throw error;
   }
 };
@@ -87,7 +85,7 @@ export const getPronunciationAudio = async (word: string): Promise<string> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const response = await ai.models.generateContent({
     model: "gemini-2.5-flash-preview-tts",
-    contents: [{ parts: [{ text: `Pronounce slowly and clearly: ${word}` }] }],
+    contents: [{ parts: [{ text: `Pronounce clearly: ${word}` }] }],
     config: {
       responseModalities: [Modality.AUDIO],
       speechConfig: {
@@ -99,7 +97,7 @@ export const getPronunciationAudio = async (word: string): Promise<string> => {
   });
 
   const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-  if (!base64Audio) throw new Error("Audio generation failed");
+  if (!base64Audio) throw new Error("발음 생성에 실패했습니다.");
   return base64Audio;
 };
 

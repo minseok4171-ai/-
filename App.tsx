@@ -4,7 +4,6 @@ import { Search, Volume2, History, X, GraduationCap, BookOpen, Quote, Loader2, S
 import { getWordInfo, getPronunciationAudio, decode, decodeAudioData } from './geminiService';
 import { WordDefinition, SearchHistory } from './types';
 
-// Main App Component for the K-12 Educational Dictionary
 const App: React.FC = () => {
   const [query, setQuery] = useState('');
   const [result, setResult] = useState<WordDefinition | null>(null);
@@ -13,29 +12,24 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
 
-  // Load search history on mount
   useEffect(() => {
     try {
-      const savedHistory = localStorage.getItem('edu_dict_history');
-      if (savedHistory) {
-        setHistory(JSON.parse(savedHistory));
-      }
+      const savedHistory = localStorage.getItem('wawa_dict_history');
+      if (savedHistory) setHistory(JSON.parse(savedHistory));
     } catch (e) {
-      console.warn("Could not load search history from localStorage.");
+      console.warn("History load failed");
     }
   }, []);
 
-  // Helper to save words to local history
   const saveToHistory = (word: string) => {
     const newHistory = [
       { word, timestamp: Date.now() },
       ...history.filter(h => h.word.toLowerCase() !== word.toLowerCase())
     ].slice(0, 10);
     setHistory(newHistory);
-    localStorage.setItem('edu_dict_history', JSON.stringify(newHistory));
+    localStorage.setItem('wawa_dict_history', JSON.stringify(newHistory));
   };
 
-  // Search handler using Gemini API
   const handleSearch = async (e?: React.FormEvent, searchWord?: string) => {
     if (e) e.preventDefault();
     const targetWord = (searchWord || query).trim();
@@ -50,21 +44,16 @@ const App: React.FC = () => {
       setResult(data);
       saveToHistory(data.word);
     } catch (err: any) {
-      console.error("Word Search Error:", err);
-      // Friendly error messages for students
-      let errorMessage = '단어를 찾는 중 오류가 발생했습니다.';
-      if (err.message?.includes('401') || err.message?.includes('API_KEY')) {
-        errorMessage = '시스템 오류: API 키가 올바르지 않거나 설정되지 않았습니다.';
-      } else if (err.message?.includes('404')) {
-        errorMessage = '검색된 정보를 찾을 수 없습니다.';
-      }
-      setError(errorMessage);
+      console.error("Search Error:", err);
+      let msg = '단어를 찾는 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.';
+      if (err.message?.includes('API_KEY')) msg = '시스템 설정 오류: API 키가 유효하지 않습니다.';
+      if (err.name === 'SyntaxError') msg = '데이터 해석 오류: AI가 올바른 형식으로 응답하지 않았습니다.';
+      setError(msg);
     } finally {
       setLoading(false);
     }
   };
 
-  // Play pronunciation audio via Gemini TTS
   const playAudio = async () => {
     if (!result || isPlaying) return;
     setIsPlaying(true);
@@ -78,12 +67,11 @@ const App: React.FC = () => {
       source.onended = () => setIsPlaying(false);
       source.start();
     } catch (err) {
-      console.error("Audio playback error:", err);
+      console.error("Audio error:", err);
       setIsPlaying(false);
     }
   };
 
-  // Helper to highlight the searched word within example sentences
   const highlightWord = (sentence: string, word: string) => {
     if (!word) return sentence;
     const parts = sentence.split(new RegExp(`(${word})`, 'gi'));
@@ -105,7 +93,7 @@ const App: React.FC = () => {
           <div className="flex items-center gap-2">
             <GraduationCap className="w-8 h-8 text-indigo-600" />
             <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600">
-              K-12 Edu Dictionary
+              WAWA 학습코칭학원 영어사전
             </h1>
           </div>
           <BookOpen className="w-6 h-6 text-slate-400" />
@@ -113,7 +101,6 @@ const App: React.FC = () => {
       </header>
 
       <main className="max-w-4xl mx-auto px-4 pt-8">
-        {/* Search Bar */}
         <form onSubmit={handleSearch} className="relative group mb-8">
           <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
             <Search className="w-5 h-5 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
@@ -121,7 +108,7 @@ const App: React.FC = () => {
           <input
             type="text"
             className="w-full h-14 pl-12 pr-12 bg-white border-2 border-slate-200 rounded-2xl outline-none focus:border-indigo-500 shadow-sm transition-all text-lg"
-            placeholder="Search an English word..."
+            placeholder="궁금한 영어 단어를 입력하세요..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
@@ -139,11 +126,10 @@ const App: React.FC = () => {
             className="absolute right-3 top-2.5 h-9 px-6 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-xl transition-colors disabled:opacity-50"
             disabled={loading || !query.trim()}
           >
-            {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Search'}
+            {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : '검색'}
           </button>
         </form>
 
-        {/* Error State */}
         {error && (
           <div className="mb-8 p-4 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3 text-red-700">
             <AlertCircle className="w-5 h-5 mt-0.5 flex-shrink-0" />
@@ -151,12 +137,11 @@ const App: React.FC = () => {
           </div>
         )}
 
-        {/* Empty State / Dashboard */}
         {!result && !loading && !error && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="bg-white p-6 rounded-2xl border shadow-sm">
               <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                <History className="w-5 h-5 text-slate-400" /> Recent Searches
+                <History className="w-5 h-5 text-slate-400" /> 최근 검색어
               </h2>
               {history.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
@@ -171,29 +156,27 @@ const App: React.FC = () => {
                   ))}
                 </div>
               ) : (
-                <p className="text-slate-400 text-sm">No recent searches yet.</p>
+                <p className="text-slate-400 text-sm">검색 기록이 없습니다.</p>
               )}
             </div>
             <div className="bg-indigo-50 p-6 rounded-2xl border border-indigo-100">
               <h2 className="text-lg font-semibold text-indigo-900 mb-2 flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-indigo-600" /> Learning Tip
+                <Sparkles className="w-5 h-5 text-indigo-600" /> 오늘의 학습 팁
               </h2>
               <p className="text-indigo-800/80 text-sm leading-relaxed">
-                Try searching for words like "enthusiasm" or "sustainable" to see detailed meanings, examples, and synonyms specially curated for students!
+                단어의 뜻뿐만 아니라 예문을 큰 소리로 따라 읽어보세요! WAWA와 함께라면 영어 실력이 쑥쑥 늘어날 거예요.
               </p>
             </div>
           </div>
         )}
 
-        {/* Loading State */}
         {loading && (
           <div className="flex flex-col items-center justify-center py-20 gap-4">
             <Loader2 className="w-10 h-10 text-indigo-600 animate-spin" />
-            <p className="text-slate-500 animate-pulse font-medium">Looking up the best definition for you...</p>
+            <p className="text-slate-500 animate-pulse font-medium">단어 정보를 가져오고 있습니다...</p>
           </div>
         )}
 
-        {/* Results View */}
         {result && (
           <article className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <section className="bg-white p-8 rounded-3xl border shadow-sm">
@@ -206,7 +189,6 @@ const App: React.FC = () => {
                       onClick={playAudio}
                       disabled={isPlaying}
                       className="p-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-full transition-colors disabled:opacity-50"
-                      title="Listen to pronunciation"
                     >
                       <Volume2 className={`w-5 h-5 ${isPlaying ? 'animate-pulse' : ''}`} />
                     </button>
@@ -220,19 +202,6 @@ const App: React.FC = () => {
                   ))}
                 </div>
               </div>
-
-              {result.synonyms.length > 0 && (
-                <div className="mt-8 border-t pt-6">
-                  <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-4">General Synonyms</h3>
-                  <div className="flex flex-wrap gap-2">
-                    {result.synonyms.map((s, i) => (
-                      <span key={i} className="px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-lg text-sm font-medium">
-                        {s}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
             </section>
 
             {result.meanings.map((meaning, mIdx) => (
@@ -247,23 +216,23 @@ const App: React.FC = () => {
                 </div>
 
                 <div>
-                  <h4 className="text-slate-500 text-xs font-bold uppercase tracking-widest mb-2">Meaning & Korean</h4>
-                  <p className="text-lg font-medium text-slate-800 mb-2">{meaning.definition}</p>
-                  <div className="flex flex-wrap gap-2">
+                  <h4 className="text-slate-500 text-xs font-bold uppercase tracking-widest mb-2">뜻 풀이</h4>
+                  <div className="flex flex-wrap gap-2 mb-2">
                     {meaning.koreanMeanings.map((km, i) => (
                       <span key={i} className="text-xl font-bold text-indigo-600">{km}{i < meaning.koreanMeanings.length - 1 ? ',' : ''}</span>
                     ))}
                   </div>
+                  <p className="text-lg font-medium text-slate-600">{meaning.definition}</p>
                 </div>
 
                 {meaning.examples.length > 0 && (
                   <div className="space-y-4">
                     <h4 className="text-slate-500 text-xs font-bold uppercase tracking-widest flex items-center gap-2">
-                      <Quote className="w-3 h-3" /> Examples
+                      <Quote className="w-3 h-3" /> 학습용 예문
                     </h4>
                     <ul className="space-y-4">
                       {meaning.examples.map((ex, eIdx) => (
-                        <li key={eIdx} className="pl-4 border-l-4 border-slate-100">
+                        <li key={eIdx} className="pl-4 border-l-4 border-indigo-100">
                           <p className="text-slate-800 text-lg italic mb-1">
                             {highlightWord(ex.sentence, result.word)}
                           </p>
@@ -277,22 +246,22 @@ const App: React.FC = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t">
                   <div>
                     <h4 className="text-slate-400 text-xs font-bold uppercase tracking-widest mb-3 flex items-center gap-2">
-                      <PlusCircle className="w-3 h-3 text-green-500" /> Synonyms
+                      <PlusCircle className="w-3 h-3 text-green-500" /> 유의어
                     </h4>
                     <div className="flex flex-wrap gap-2">
                       {meaning.synonyms.length > 0 ? meaning.synonyms.map((s, i) => (
                         <span key={i} className="text-sm text-slate-600 bg-slate-50 px-2 py-1 rounded border">{s}</span>
-                      )) : <span className="text-slate-400 text-xs">None</span>}
+                      )) : <span className="text-slate-400 text-xs">없음</span>}
                     </div>
                   </div>
                   <div>
                     <h4 className="text-slate-400 text-xs font-bold uppercase tracking-widest mb-3 flex items-center gap-2">
-                      <MinusCircle className="w-3 h-3 text-red-400" /> Antonyms
+                      <MinusCircle className="w-3 h-3 text-red-400" /> 반의어
                     </h4>
                     <div className="flex flex-wrap gap-2">
                       {meaning.antonyms.length > 0 ? meaning.antonyms.map((a, i) => (
                         <span key={i} className="text-sm text-slate-600 bg-slate-50 px-2 py-1 rounded border">{a}</span>
-                      )) : <span className="text-slate-400 text-xs">None</span>}
+                      )) : <span className="text-slate-400 text-xs">없음</span>}
                     </div>
                   </div>
                 </div>
